@@ -1,0 +1,20 @@
+eshiam@123
+
+VM Windows R2012 server pswd: Kandula@200
+
+Shared_Folder (file://DESKTOP-GPA1VQM/Shared_Folder)
+
+SQL SERVER 2019 PSWD:  Kandula@100
+
+Ldap pswd is: password
+
+Identity created on my name: User: Rajasekhara PSWD:Kandula@100
+
+
+C:\OpenLDAP\bin>slappasswd.exe
+New password: password
+Re-enter new password: Kandula@100
+{SSHA}DpCXkx6bnRHSaI8ULEhai0EfQ8kZPlrE
+OpenLDAP:OPenldap connection name
+
+
