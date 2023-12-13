@@ -1,0 +1,130 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1684129021555" explicitTransitions="true" id="c0a81db387fb113b81881de97e7312df" libraries="Identity" modified="1690868694547" name="Workflow for two level approval identity" type="IdentityLifecycle">
+  <Variable input="true" name="trigger">
+    <Description>The IdentityTrigger</Description>
+  </Variable>
+  <Variable input="true" name="event" transient="true"/>
+  <Variable input="true" name="identityName">
+    <Description>The name of the identity.</Description>
+  </Variable>
+  <Variable name="identityNames" type="list"/>
+  <Variable initializer="true" name="trace">
+    <Description>Trace level.</Description>
+  </Variable>
+  <Description>Process a new employee.</Description>
+  <Step icon="Start" name="Start" posX="25" posY="80">
+    <Transition to="Create Identity Model"/>
+  </Step>
+  <Step action="call:getIdentityModel" name="Create Identity Model" posX="144" resultVariable="identityModel">
+    <Transition to="Select Identity"/>
+  </Step>
+  <Step icon="Default" name="Select Identity" posX="296">
+    <Approval mode="serial" owner="spadmin" return="identityModel" send="identityModel">
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="Identity  Selection Form"/>
+      <Arg name="workItemFormBasePath" value="identityModel"/>
+    </Approval>
+    <Transition to="Build Confirmation Form"/>
+  </Step>
+  <Step action="call:buildReadOnlyForm" name="Build Confirmation Form" posX="708" posY="16" resultVariable="confirmationForm">
+    <Arg name="form" value="Identity  Selection Form"/>
+    <Description>
+      Create the read-only form to be displayed.
+    </Description>
+    <Transition to="Manager Approval"/>
+  </Step>
+  <Step icon="Approval" name="Manager Approval" posX="499" posY="178">
+    <Approval mode="serial" name="Manager Approval Form" return="identityModel" send="launcher,status">
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="ref:confirmationForm"/>
+      <Arg name="workItemFormBasePath" value="identityModel"/>
+      <OwnerScript>
+        <Source>
+          import sailpoint.object.Identity;
+
+          /*String networkId=identityModel.get("networkId");
+          Filter filter=Filter.eq("networkId",networkId);
+
+          Identity myIdentity=context.getObjectByName(Identity.class,owner);
+          if (myIdentity!=null) {
+          if (myIdentity.getManager()!=null){
+          owner= myIdentity.getManager().getName();
+          }
+          }*/
+          System.out.println("****** in ownerScript");
+          if(identityModel!=null){
+          System.out.println("****** in ownerScript"+identityModel.get("userId"));
+          }
+          String owner="Aaron Nichols";
+          return owner;
+        </Source>
+      </OwnerScript>
+      <WorkItemConfig escalationStyle="none">
+        <NotificationEmailTemplateRef>
+          <Reference class="sailpoint.object.EmailTemplate" id="c0a81db3874f140081874fc437960152" name="Work Item Comment"/>
+        </NotificationEmailTemplateRef>
+      </WorkItemConfig>
+    </Approval>
+    <Transition to="Build Plan" when="approved"/>
+  </Step>
+  <Step icon="Message" name="Build Plan" posX="356" posY="182">
+    <Script>
+      <Source>
+
+        import sailpoint.object.ProvisioningPlan;
+        import sailpoint.object.ProvisioningPlan.AccountRequest;
+        import sailpoint.object.ProvisioningPlan.AttributeRequest;
+        import sailpoint.api.*;
+        import sailpoint.object.Application;
+        import sailpoint.object.Identity;
+        import sailpoint.object.ManagedAttribute;
+        import sailpoint.api.IdentityService;
+        import sailpoint.tools.Util;
+        import sailpoint.object.ProvisioningResult;
+
+        String identity="Albert Woods";
+        Identity id = context.getObjectByName(Identity.class,identity);
+        Application appObj = context.getObjectByName(Application.class,"AD Application");
+        ProvisioningResult pr = new ProvisioningResult();
+
+        IdentityService idservice = new IdentityService(context);
+
+        ProvisioningPlan plan= new  ProvisioningPlan();
+        plan.setIdentity(id);
+        plan.setNativeIdentity(id.getName());
+
+        AccountRequest accreq = new AccountRequest();
+        accreq.setApplication("AD Application");
+
+        // String entitlementName = identityModel.get("groupName");
+        // Filter filter = Filter.eq("ManagedAttribute.displayName",entitlementName);
+        // ManagedAttribute manage = context.getUniqueObject(ManagedAttribute.class,filter);
+        //String entValue = manage.getValue();
+
+        List linkList = idservice.getLinks(id, appObj);
+        System.out.println("44444***");
+
+        if(Util.isEmpty(linkList) &amp;&amp; Util.nullSafeSize(linkList)==0){
+        accreq.setOp(ProvisioningPlan.ObjectOperation.Create);
+        accreq.add(new AttributeRequest("memberOf", ProvisioningPlan.Operation.Add,"CN=DataComm,OU=Groups,OU=Demo,DC=Eshiam,DC=com"));
+        }
+        else if(!Util.isEmpty(linkList) &amp;&amp; Util.nullSafeSize(linkList)>0){
+        accreq.setOp(ProvisioningPlan.ObjectOperation.Modify);
+        accreq.add(new AttributeRequest("memberOf", ProvisioningPlan.Operation.Add,"CN=DataComm,OU=Groups,OU=Demo,DC=Eshiam,DC=com"));
+        }
+        plan.add(accreq);
+        System.out.println("ProvisioningResult:"+pr);
+        Provisioner provisioner = new Provisioner(context);
+        provisioner.execute(plan);
+
+        context.saveObject(id);
+        context.commitTransaction();
+        return pr;
+
+      </Source>
+    </Script>
+    <Transition to="Stop"/>
+  </Step>
+  <Step icon="Stop" name="Stop" posX="180" posY="170"/>
+</Workflow>

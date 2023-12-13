@@ -1,0 +1,267 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1680671893001" explicitTransitions="true" id="c0a81db3874f10c281874fd9e6090066" libraries="RapidSetup" name="RapidSetup - Joiner" type="IdentityLifecycle">
+  <Variable input="true" name="trigger">
+    <Description>The IdentityTrigger</Description>
+  </Variable>
+  <Variable input="true" name="event" transient="true">
+    <Description>
+            The IdentityChangeEvent.  It can be used to build
+            the provisioning plan, but does not need to be
+            persisted with the case, so marked as transient.
+        </Description>
+  </Variable>
+  <Variable input="true" name="identityName">
+    <Description>The name of the identity.</Description>
+  </Variable>
+  <Variable editable="true" input="true" name="requestType"/>
+  <Variable initializer="RapidSetup" input="true" name="source">
+    <Description>
+            String version of sailpoint.object.Source to indicate
+            where the request originated.  Defaults to RapidSetup.
+        </Description>
+  </Variable>
+  <Variable initializer="none" input="true" name="policyScheme">
+    <Description>
+            A String that specifies how policy checks effect the overall
+            process.
+
+            none - disabled policy checking
+
+            interactive -  allow requester to remove request items which are causing violations
+
+            continue -  continue if policy violations are found
+
+            fail -  fail and exit the workflow if any policy violations are found
+        </Description>
+  </Variable>
+  <Variable initializer="none" input="true" name="notificationScheme">
+    <Description>
+            A string that specifies who should be notified via the LCM workflows when the request has been completed.
+            The value can be null or a csv of one or more of the following options.
+
+            none or null
+            disable notifications
+
+            user
+            Identity that is being update will be notified.
+
+            manager
+            The manager of the Identity that is being updated will be notified.
+
+            requester
+            The person that has requested the update will be notified.
+        </Description>
+  </Variable>
+  <Variable name="birthrightRoles"/>
+  <Variable name="plan"/>
+  <Variable name="project"/>
+  <Variable name="certGenResultName"/>
+  <Variable initializer="true" name="saveUnmanagedPlan_WithProjectArgument">
+    <Description>
+            Set to true because we are passing the project in to save unmanaged plan as an argument.
+        </Description>
+  </Variable>
+  <Variable input="true" name="approvalScheme" output="true"/>
+  <Variable initializer="Lifecycle" name="flow"/>
+  <Description>Perform Joiner-specific processing for the identity</Description>
+  <Step icon="Start" name="Start" posX="19" posY="8">
+    <Transition to="Get Request Type"/>
+  </Step>
+  <Step action="call:getRequestType" name="Get Request Type" posX="492" posY="10" resultVariable="requestType">
+    <Arg name="defaultValue" value="joiner"/>
+    <Transition to="Mark Joiner"/>
+  </Step>
+  <Step action="call:updateProcessStatus" name="Mark Joiner" posX="251" posY="82">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="status" value="script:return sailpoint.object.Identity.RAPIDSETUP_PROC_STATE_PROCESSED"/>
+    <Transition to="Set Approval Scheme"/>
+  </Step>
+  <Step action="call:updateApprovalScheme" name="Set Approval Scheme" posX="251" posY="82">
+    <Arg name="requestType" value="ref:requestType"/>
+    <Transition to="Calculate Birthright Roles"/>
+  </Step>
+  <Step action="call:calculateBirthrightRoles" name="Calculate Birthright Roles" posX="342" posY="10" resultVariable="birthrightRoles">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Build Plan"/>
+  </Step>
+  <Step action="call:buildJoinerPlan" name="Build Plan" posX="492" posY="10" resultVariable="plan">
+    <Arg name="birthrightRoles" value="ref:birthrightRoles"/>
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Execute Joiner Post Rule" when="script:(plan == null)"/>
+    <Transition to="Process Plan"/>
+  </Step>
+  <Step name="Process Plan" posX="803" posY="90">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="plan" value="ref:plan"/>
+    <Arg name="noTriggers" value="true"/>
+    <Arg name="flow" value="ref:flow"/>
+    <Arg name="approvalScheme" value="ref:approvalScheme"/>
+    <Arg name="saveUnmanagedPlan_WithProjectArgument" value="ref:saveUnmanagedPlan_WithProjectArgument"/>
+    <Arg name="source" value="ref:source"/>
+    <Arg name="policyScheme" value="ref:policyScheme"/>
+    <Arg name="notificationScheme" value="ref:notificationScheme"/>
+    <Return name="approvalSet" to="approvalSet"/>
+    <Return name="project" to="project"/>
+    <WorkflowRef>
+      <Reference class="sailpoint.object.Workflow" id="c0a81db3874f10c281874fd80f27003e" name="LCM Provisioning"/>
+    </WorkflowRef>
+    <Transition to="Notify Manager" when="project != null &amp;&amp; project.getPlans() != null &amp;&amp; project.getPlans().size() > 0"/>
+    <Transition to="Stop"/>
+  </Step>
+  <Step action="sendEmail" icon="Default" name="Notify Manager" posX="1088" posY="164">
+    <Arg name="plan" value="ref:plan"/>
+    <Arg name="expandWorkgroupEmails" value="true"/>
+    <Arg name="to">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityNameForNotification(context, workflow,
+                              identityName, project, true);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="template">
+      <Script>
+        <Source>
+                
+                    sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,joiner,email,joinerCompleted");
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="refIdentityDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="recipientDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getManagerOrAltIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="disableStaticManagerContent">
+      <Script>
+        <Source>
+                
+                    sailpoint.object.RapidSetupConfigUtils.getBoolean("email,disableStaticManagerContent");
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="provisioningErrors">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getProvisioningErrors(context, project);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="dynamicAppContent">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getDynamicTextEmailTemplate(context, project, "email,joinerCompleted", requestType);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Transition to="Notify Manager Temporary Password" when="call:isSendTemporaryPasswordEmailEnabled"/>
+    <Transition to="Execute Joiner Post Rule"/>
+  </Step>
+  <Step action="sendEmail" icon="Default" name="Notify Manager Temporary Password" posX="917" posY="10">
+    <Arg name="plan" value="ref:plan"/>
+    <Arg name="expandWorkgroupEmails" value="true"/>
+    <Arg name="to">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityNameForNotification(context, workflow,
+                              identityName, project, true);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="template">
+      <Script>
+        <Source>
+                
+                    sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,joiner,email,joinerSendTemporaryPassword");
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="refIdentityDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="recipientDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getManagerOrAltIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="requestId">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getRequestId(context, plan);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="disableStaticManagerContent">
+      <Script>
+        <Source>
+                
+                    sailpoint.object.RapidSetupConfigUtils.getBoolean("email,disableStaticManagerContent");
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="provisioningErrors">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getProvisioningErrors(context, project);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="dynamicAppContent">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getDynamicTextEmailTemplate(context, project, "email,joinerSendTemporaryPassword", requestType);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Transition to="Execute Joiner Post Rule"/>
+  </Step>
+  <Step action="call:executePostJoinerRule" name="Execute Joiner Post Rule" posX="492" posY="10">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="project" value="ref:project"/>
+    <Transition to="Stop"/>
+  </Step>
+  <Step icon="Stop" name="Stop" posX="901" posY="289"/>
+</Workflow>

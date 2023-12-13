@@ -1,0 +1,338 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1680671893143" explicitTransitions="true" id="c0a81db3874f10c281874fd9e6970067" libraries="RapidSetup" name="RapidSetup - Leaver" type="IdentityLifecycle">
+  <Variable input="true" name="trigger">
+    <Description>The IdentityTrigger</Description>
+  </Variable>
+  <Variable input="true" name="event" transient="true">
+    <Description>
+            The IdentityChangeEvent.  It can be used to build
+            the provisioning plan, but does not need to be
+            persisted with the case, so marked as transient.
+        </Description>
+  </Variable>
+  <Variable input="true" name="identityName">
+    <Description>The name of the identity.</Description>
+  </Variable>
+  <Variable initializer="script:Boolean.FALSE" input="true" name="isTerminateIdentity" type="boolean">
+    <Description>Set to true if this workflow was launched by terminating an identity</Description>
+  </Variable>
+  <Variable initializer="script:getIdentityProperty(identityName, &quot;manager.name&quot;)" name="identityManager">
+    <Description>
+            The Manager of Identity being processed
+        </Description>
+  </Variable>
+  <Variable input="true" name="reasonComments"/>
+  <Variable editable="true" input="true" name="requestType"/>
+  <Variable input="true" name="approvalScheme" output="true"/>
+  <Variable initializer="Lifecycle" name="flow"/>
+  <Variable initializer="none" input="true" name="policyScheme">
+    <Description>
+            A String that specifies how policy checks effect the overall
+            process.
+
+            none - disabled policy checking
+
+            interactive -  allow requester to remove request items which are causing violations
+
+            continue -  continue if policy violations are found
+
+            fail -  fail and exit the workflow if any policy violations are found
+        </Description>
+  </Variable>
+  <Variable initializer="none" input="true" name="notificationScheme">
+    <Description>
+            A string that specifies who should be notified via the LCM workflows when the request has been completed.
+            The value can be null or a csv of one or more of the following options.
+
+            none or null
+            disable notifications
+
+            user
+            Identity that is being update will be notified.
+
+            manager
+            The manager of the Identity that is being updated will be notified.
+
+            requester
+            The person that has requested the update will be notified.
+        </Description>
+  </Variable>
+  <Variable name="birthrightRoles"/>
+  <Variable name="leaverPlanBuilder" transient="true"/>
+  <Variable name="immediatePlan" output="true"/>
+  <Variable name="deferredPlans" output="true"/>
+  <Variable name="project"/>
+  <Variable initializer="true" name="saveUnmanagedPlan_WithProjectArgument">
+    <Description>
+            Set to true because we are passing the project in to save unmanaged plan as an argument.
+        </Description>
+  </Variable>
+  <Variable initializer="RapidSetup" input="true" name="source">
+    <Description>
+            String version of sailpoint.object.Source to indicate
+            where the request originated.  Defaults to RapidSetup.
+        </Description>
+  </Variable>
+  <Description>Perform Leaver-specific processing for the identity</Description>
+  <Step icon="Start" name="Start" posX="19" posY="8">
+    <Transition to="Get Request Type"/>
+  </Step>
+  <Step action="call:getRequestType" name="Get Request Type" posX="133" posY="5" resultVariable="requestType">
+    <Arg name="defaultValue" value="leaver"/>
+    <Transition to="Remove IdentityIQ Artifacts Ownership"/>
+  </Step>
+  <Step action="call:reassignOwnership" name="Remove IdentityIQ Artifacts Ownership" posX="277" posY="7" resultVariable="ownershipMap">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Transition to="Notify IdentityIQ Artifacts Reassignment" when="!(ownershipMap.isEmpty())"/>
+    <Transition to="Remove Identity Ownership"/>
+  </Step>
+  <Step action="sendEmail" icon="Default" name="Notify IdentityIQ Artifacts Reassignment" posX="453" posY="1">
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Arg name="expandWorkgroupEmails" value="true"/>
+    <Arg name="ownershipMap" value="ref:ownershipMap"/>
+    <Arg name="emailSubject" value="Workitems/Artifacts"/>
+    <Arg name="to" value="ref:identityManager"/>
+    <Arg name="template">
+      <Script>
+        <Source>
+                
+                    if(isTerminateIdentity) {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,terminate,email,ownershipReassignment");
+                    } else {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,leaver,email,ownershipReassignment");
+                    }
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="refIdentityDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="recipientDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityManager);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Transition to="Remove Identity Ownership"/>
+  </Step>
+  <Step action="call:executeRemoveIdentityOwnership" name="Remove Identity Ownership" posX="326" posY="108" resultVariable="identityOwnershipMap">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Transition to="Notify Identity Owners Reassignment" when="!(identityOwnershipMap.isEmpty())"/>
+    <Transition to="Auto Reject Pending Requests"/>
+  </Step>
+  <Step action="sendEmail" icon="Default" name="Notify Identity Owners Reassignment" posX="556" posY="124">
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Arg name="expandWorkgroupEmails" value="true"/>
+    <Arg name="ownershipMap" value="ref:identityOwnershipMap"/>
+    <Arg name="emailSubject" value="Identity"/>
+    <Arg name="to" value="ref:identityManager"/>
+    <Arg name="template">
+      <Script>
+        <Source>
+                
+                    if(isTerminateIdentity) {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,terminate,email,ownershipReassignment");
+                    } else {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,leaver,email,ownershipReassignment");
+                    }
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="refIdentityDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="recipientDisplayName">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityManager);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Transition to="Auto Reject Pending Requests"/>
+  </Step>
+  <Step action="call:rejectApprovalWorkItems" name="Auto Reject Pending Requests" posX="339" posY="202">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Clear Authentication Questions"/>
+  </Step>
+  <Step action="call:clearAuthenticationQuestionsAndPassword" name="Clear Authentication Questions" posX="341" posY="322">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Set Approval Scheme"/>
+  </Step>
+  <Step action="call:updateApprovalScheme" name="Set Approval Scheme" posX="343" posY="415">
+    <Arg name="requestType" value="ref:requestType"/>
+    <Transition to="Calculate Birthright Roles"/>
+  </Step>
+  <Step action="call:calculateBirthrightRoles" name="Calculate Birthright Roles" posX="414" posY="483" resultVariable="birthrightRoles">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Get Immediate Plan Builder"/>
+  </Step>
+  <Step action="call:getLeaverPlanBuilder" name="Get Immediate Plan Builder" posX="565" posY="482" resultVariable="leaverPlanBuilder">
+    <Arg name="birthrightRoles" value="ref:birthrightRoles"/>
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="reasonComments" value="ref:reasonComments"/>
+    <Arg name="isTerminateIdentity" value="ref:isTerminateIdentity"/>
+    <Transition to="Build Immediate Plan"/>
+  </Step>
+  <Step name="Build Immediate Plan" posX="565" posY="380" resultVariable="immediatePlan">
+    <Script>
+      <Source>
+                
+                return leaverPlanBuilder.buildPlan();
+                
+            </Source>
+    </Script>
+    <Transition to="Process Plan" when="script:(immediatePlan != null)"/>
+    <Transition to="Get Deferred Plan Builder"/>
+  </Step>
+  <Step name="Process Plan" posX="773" posY="328">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Arg name="noTriggers" value="true"/>
+    <Arg name="flow" value="ref:flow"/>
+    <Arg name="source" value="ref:source"/>
+    <Arg name="approvalScheme" value="ref:approvalScheme"/>
+    <Arg name="saveUnmanagedPlan_WithProjectArgument" value="ref:saveUnmanagedPlan_WithProjectArgument"/>
+    <Arg name="policyScheme" value="ref:policyScheme"/>
+    <Arg name="notificationScheme" value="ref:notificationScheme"/>
+    <Return name="approvalSet" to="approvalSet"/>
+    <Return name="project" to="project"/>
+    <WorkflowRef>
+      <Reference class="sailpoint.object.Workflow" id="c0a81db3874f10c281874fd80f27003e" name="LCM Provisioning"/>
+    </WorkflowRef>
+    <Transition to="Notify Manager" when="project != null &amp;&amp; project.getPlans() != null &amp;&amp; project.getPlans().size() > 0"/>
+    <Transition to="Get Deferred Plan Builder"/>
+  </Step>
+  <Step action="sendEmail" icon="Default" name="Notify Manager" posX="829" posY="176">
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Arg name="expandWorkgroupEmails" value="true"/>
+    <Arg name="to">
+      <Script>
+        <Source>
+              
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityNameForNotification(context, workflow,
+                              identityName, project, true);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="template">
+      <Script>
+        <Source>
+              
+                    if(isTerminateIdentity) {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,terminate,email,terminateCompleted");
+                    } else {
+                        return sailpoint.object.RapidSetupConfigUtils.getString("businessProcesses,leaver,email,leaverCompleted");
+                    }
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="refIdentityDisplayName">
+      <Script>
+        <Source>
+              
+                    sailpoint.rapidsetup.tools.EmailTools.getIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="recipientDisplayName">
+      <Script>
+        <Source>
+              
+                    sailpoint.rapidsetup.tools.EmailTools.getManagerOrAltIdentityDisplayName(context, identityName);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="disableStaticManagerContent">
+      <Script>
+        <Source>
+              
+                    sailpoint.object.RapidSetupConfigUtils.getBoolean("email,disableStaticManagerContent");
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Arg name="provisioningErrors">
+      <Script>
+        <Source>
+                
+                    sailpoint.rapidsetup.tools.EmailTools.getProvisioningErrors(context, project);
+                
+            </Source>
+      </Script>
+    </Arg>
+    <Transition to="Refresh Identity Links"/>
+  </Step>
+  <Step action="call:repairIdentity" name="Refresh Identity Links" posX="983" posY="315">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="plan" value="ref:immediatePlan"/>
+    <Transition to="Get Deferred Plan Builder"/>
+  </Step>
+  <Step action="call:getLeaverPlanBuilder" name="Get Deferred Plan Builder" posX="846" posY="488" resultVariable="deferredLeaverPlanBuilder">
+    <Arg name="birthrightRoles" value="ref:birthrightRoles"/>
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="reasonComments" value="ref:reasonComments"/>
+    <Transition to="Build Deferred Plan"/>
+  </Step>
+  <Step name="Build Deferred Plan" posX="1020" posY="487" resultVariable="deferredPlans">
+    <Script>
+      <Source>
+                
+                return deferredLeaverPlanBuilder.buildDeferredPlans();
+                
+            </Source>
+    </Script>
+    <Transition to="Schedule Deferred Plan" when="script:(deferredPlans != null)"/>
+    <Transition to="Execute Leaver Post Rule"/>
+  </Step>
+  <Step action="call:executeLeaverDeferActions" name="Schedule Deferred Plan" posX="1293" posY="480">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="appPlans" value="ref:deferredPlans"/>
+    <Arg name="noTriggers" value="true"/>
+    <Arg name="flow" value="ref:flow"/>
+    <Arg name="workflow" value="LCM Provisioning"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="reasonComments" value="ref:reasonComments"/>
+    <Arg name="approvalScheme" value="ref:approvalScheme"/>
+    <Arg name="isTerminateIdentity" value="ref:isTerminateIdentity"/>
+    <Arg name="policyScheme" value="ref:policyScheme"/>
+    <Arg name="notificationScheme" value="ref:notificationScheme"/>
+    <Arg name="source" value="ref:source"/>
+    <Transition to="Execute Leaver Post Rule"/>
+  </Step>
+  <Step action="call:executePostLeaverRule" name="Execute Leaver Post Rule" posX="1340" posY="238">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="project" value="ref:project"/>
+    <Transition to="Stop"/>
+  </Step>
+  <Step icon="Stop" name="Stop" posX="1338" posY="118"/>
+</Workflow>

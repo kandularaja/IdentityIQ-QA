@@ -1,0 +1,133 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1680671893317" explicitTransitions="true" id="c0a81db3874f10c281874fd9e7450068" libraries="RapidSetup" modified="1682398454910" name="RapidSetup - Mover" type="IdentityLifecycle">
+  <Variable input="true" name="trigger">
+    <Description>The IdentityTrigger</Description>
+  </Variable>
+  <Variable input="true" name="event" transient="true">
+    <Description>
+            The IdentityChangeEvent.  It can be used to build
+            the provisioning plan, but does not need to be
+            persisted with the case, so marked as transient.
+        </Description>
+  </Variable>
+  <Variable input="true" name="identityName">
+    <Description>The name of the identity.</Description>
+  </Variable>
+  <Variable editable="true" input="true" name="requestType"/>
+  <Variable input="true" name="approvalScheme" output="true"/>
+  <Variable initializer="Lifecycle" name="flow"/>
+  <Variable initializer="RapidSetup" input="true" name="source">
+    <Description>
+            String version of sailpoint.object.Source to indicate
+            where the request originated.  Defaults to RapidSetup.
+        </Description>
+  </Variable>
+  <Variable initializer="none" input="true" name="policyScheme">
+    <Description>
+            A String that specifies how policy checks effect the overall
+            process.
+
+            none - disabled policy checking
+
+            interactive -  allow requester to remove request items which are causing violations
+
+            continue -  continue if policy violations are found
+
+            fail -  fail and exit the workflow if any policy violations are found
+        </Description>
+  </Variable>
+  <Variable initializer="none" input="true" name="notificationScheme">
+    <Description>
+            A string that specifies who should be notified via the LCM workflows when the request has been completed.
+            The value can be null or a csv of one or more of the following options.
+
+            none or null
+            disable notifications
+
+            user
+            Identity that is being update will be notified.
+
+            manager
+            The manager of the Identity that is being updated will be notified.
+
+            requester
+            The person that has requested the update will be notified.
+        </Description>
+  </Variable>
+  <Variable name="birthrightRoles"/>
+  <Variable name="plan"/>
+  <Variable name="project"/>
+  <Variable name="isCertGenCompleted"/>
+  <Variable initializer="true" name="saveUnmanagedPlan_WithProjectArgument">
+    <Description>
+            Set to true because we are passing the project in to save unmanaged plan as an argument.
+        </Description>
+  </Variable>
+  <Description>Perform Mover-specific processing for the identity</Description>
+  <Step icon="Start" name="Start" posX="28" posY="10">
+    <Transition to="Get Request Type"/>
+  </Step>
+  <Step action="call:getRequestType" name="Get Request Type" posX="98" posY="10" resultVariable="requestType">
+    <Arg name="defaultValue" value="mover"/>
+    <Transition to="Set Approval Scheme"/>
+  </Step>
+  <Step action="call:updateApprovalScheme" name="Set Approval Scheme" posX="251" posY="82">
+    <Arg name="requestType" value="ref:requestType"/>
+    <Transition to="Launch Certification" when="call:isMoverCertificationEnabled"/>
+    <Transition to="Calculate Birthright Roles" when="call:isMoverJoinerEnabled"/>
+    <Transition to="Execute Mover Post Rule"/>
+  </Step>
+  <Step action="call:launchCertificationFromTemplate" icon="Default" name="Launch Certification" posX="275" posY="99" resultVariable="isCertGenCompleted">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="templateName" value="CertificationTemplate-RapidSetup-Mover"/>
+    <Arg name="certGenMaxWaitSeconds" value="5"/>
+    <Arg name="params" value="call:getMoverCertificationConfiguration"/>
+    <Transition to="Wait for cert gen" when="script:!isCertGenCompleted"/>
+    <Transition to="Calculate Birthright Roles" when="call:isMoverJoinerEnabled"/>
+    <Transition to="Execute Mover Post Rule"/>
+  </Step>
+  <Step action="call:certWaitExpired" name="Wait for cert gen" posX="584" posY="16" wait="script: new Integer(5)">
+    <Description>
+            Pause the workflow, and wait in the background for the certification
+            generation to have long enough to finish.  The wait is 5 minutes,
+            unless you change the value of wait param for this step.
+        </Description>
+    <Transition to="Calculate Birthright Roles" when="call:isMoverJoinerEnabled"/>
+    <Transition to="Execute Mover Post Rule"/>
+  </Step>
+  <Step action="call:calculateBirthrightRoles" name="Calculate Birthright Roles" posX="163" posY="260" resultVariable="birthrightRoles">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Build Plan"/>
+  </Step>
+  <Step action="call:buildMoverPlan" name="Build Plan" posX="378" posY="260" resultVariable="plan">
+    <Arg name="birthrightRoles" value="ref:birthrightRoles"/>
+    <Arg name="identityName" value="ref:identityName"/>
+    <Transition to="Execute Mover Post Rule" when="script:(plan == null)"/>
+    <Transition to="Process Plan"/>
+  </Step>
+  <Step name="Process Plan" posX="736" posY="260">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="plan" value="ref:plan"/>
+    <Arg name="noTriggers" value="true"/>
+    <Arg name="flow" value="ref:flow"/>
+    <Arg name="approvalScheme" value="ref:approvalScheme"/>
+    <Arg name="saveUnmanagedPlan_WithProjectArgument" value="ref:saveUnmanagedPlan_WithProjectArgument"/>
+    <Arg name="source" value="ref:source"/>
+    <Arg name="policyScheme" value="ref:policyScheme"/>
+    <Arg name="notificationScheme" value="ref:notificationScheme"/>
+    <Return name="approvalSet" to="approvalSet"/>
+    <Return name="project" to="project"/>
+    <WorkflowRef>
+      <Reference class="sailpoint.object.Workflow" id="c0a81db3874f10c281874fd80f27003e" name="LCM Provisioning"/>
+    </WorkflowRef>
+    <Transition to="Execute Mover Post Rule"/>
+  </Step>
+  <Step action="call:executePostMoverRule" name="Execute Mover Post Rule" posX="884" posY="10">
+    <Arg name="identityName" value="ref:identityName"/>
+    <Arg name="requestType" value="ref:requestType"/>
+    <Arg name="project" value="ref:project"/>
+    <Transition to="Stop"/>
+  </Step>
+  <Step icon="Stop" name="Stop" posX="1009" posY="10"/>
+</Workflow>

@@ -1,0 +1,96 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1690353238087" explicitTransitions="true" id="c0a8010589521a9e818990e780472b3f" modified="1690361505583" name="Custom_workflow for Approval">
+  <Variable initializer="false" name="transient"/>
+  <Variable initializer="true" name="trace"/>
+  <Variable initializer="spadmin" input="true" name="fallbackApprover"/>
+  <Variable initializer="QuicklinkApproval" name="flow"/>
+  <Variable initializer="Arthur Bryant" name="launcher"/>
+  <Variable initializer="Custom-Employee Group" name="approvingIdentities"/>
+  <Variable name="managerApprover"/>
+  <Variable name="secondlevelApproval"/>
+  <Step icon="Start" name="Start" posX="11" posY="11">
+    <Transition to="launcher Detailes"/>
+  </Step>
+  <Step icon="Default" name="launcher Detailes" posX="138" posY="13">
+    <Approval name="AD_Global_Form" owner="ref:launcher" return="name,firstname,lastname,locationgroup,marketgroup,concept" send="launcher">
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="AD_launcherApprovalForm"/>
+      <Arg name="workItemDescription" value="User Account Request"/>
+    </Approval>
+    <Transition to="ManagerApproval"/>
+  </Step>
+  <Step icon="Default" name="ManagerApproval" posX="138" posY="13">
+    <Approval name="AD_ManagerApproval" return="name,firstname,lastname,locationgroup,marketgroup,concept" send="name,firstname,lastname,locationgroup,marketgroup,concept">
+      <Arg name="name" value="ref:name"/>
+      <Arg name="firstname" value="ref:firstname"/>
+      <Arg name="lastname" value="ref:lastname"/>
+      <Arg name="locationgroup" value="ref:locationgroup"/>
+      <Arg name="marketgroup" value="ref:marketgroup"/>
+      <Arg name="concept" value="ref:concept"/>
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="AD_ManagerApproval"/>
+      <Arg name="workItemDescription" value="Manager Approval for $name"/>
+      <OwnerScript>
+        <Source>
+          import sailpoint.object.Identity;
+
+          System.out.println("identityName  : "+name);
+          if(null != name @and void !=name){
+          Identity idObj = context.getObjectByName(Identity.class, name);
+          System.out.println("manager Approver name ===> "+idObj.getManager().getName());
+
+          if(null != idObj @and idObj.getManager() != null){
+          wfcontext.setVariable("managerApprover",idObj.getManager().getName());
+          System.out.println("**********************");
+          return idObj.getManager().getName();
+          }
+          }else{
+          wfcontext.setVariable("managerApprover","spadmin");
+          return "spadmin";
+          }
+
+        </Source>
+      </OwnerScript>
+    </Approval>
+    <Transition to="second level Approval" when="approved"/>
+    <Transition to="end" when="rejected"/>
+  </Step>
+  <Step icon="Default" name="second level Approval" posX="138" posY="13">
+    <Approval name="AD_secondlevelApproval" owner="ref:approvingIdentities" return="name,firstname,lastname,locationgroup,marketgroup,concept,group,Hierarchy-LogicalName,teamworx,language" send="name,firstname,lastname,locationgroup,marketgroup,concept">
+      <Arg name="name" value="ref:name"/>
+      <Arg name="firstname" value="ref:firstname"/>
+      <Arg name="lastname" value="ref:lastname"/>
+      <Arg name="approvalScheme" value="identity"/>
+      <Arg name="approvingIdentities" value="ref:approvingIdentities"/>
+      <Arg name="managerApprover" value="ref:managerApprover"/>
+      <Arg name="locationgroup" value="ref:locationgroup"/>
+      <Arg name="marketgroup" value="ref:marketgroup"/>
+      <Arg name="concept" value="ref:concept"/>
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="AD_secondlevelApproval"/>
+      <Arg name="workItemDescription" value="secondlevelApproval for $name"/>
+    </Approval>
+    <Transition to="third level Approval" when="approved"/>
+    <Transition to="end" when="rejected"/>
+  </Step>
+  <Step icon="Default" name="third level Approval" posX="138" posY="13">
+    <Approval name="AD_thirdlevelApproval" return="name,firstname,lastname,locationgroup,marketgroup,concept,group,Hierarchy-LogicalName,teamworx,language" send="name,firstname,lastname,locationgroup,marketgroup,concept,group,Hierarchy-LogicalName,teamworx,language">
+      <Arg name="name" value="ref:name"/>
+      <Arg name="firstname" value="ref:firstname"/>
+      <Arg name="lastname" value="ref:lastname"/>
+      <Arg name="approvalScheme" value="identity"/>
+      <Arg name="approvingIdentities" value="ref:approvingIdentities"/>
+      <Arg name="managerApprover" value="ref:managerApprover"/>
+      <Arg name="locationgroup" value="ref:locationgroup"/>
+      <Arg name="marketgroup" value="ref:marketgroup"/>
+      <Arg name="concept" value="ref:concept"/>
+      <Arg name="workItemType" value="Form"/>
+      <Arg name="workItemForm" value="AD_thirdlevelApproval"/>
+      <Arg name="workItemDescription" value="thirdlevelApproval for $name"/>
+    </Approval>
+    <Transition to="end" when="approved"/>
+    <Transition to="end" when="rejected"/>
+  </Step>
+  <Step icon="Default" name="end" posX="451" posY="31"/>
+</Workflow>

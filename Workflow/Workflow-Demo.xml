@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow created="1681811819691" explicitTransitions="true" id="c0a81db3879319e3818793cbccab0121" modified="1681907154213" monitored="true" name="Demo">
+  <Variable name="testVar3"/>
+  <Variable name="testVar2"/>
+  <Variable initializer="true" name="trace"/>
+  <Variable name="testVar1"/>
+  <Description>Demo Workflow for testing</Description>
+  <Step icon="Start" name="Start" posX="25" posY="12">
+    <Script>
+      <Source>
+					testVar3=3;
+          testVar1=true;
+        
+      </Source>
+    </Script>
+    <Transition to="test"/>
+  </Step>
+  <Step icon="Start" name="test" posX="25" posY="12">
+    <Script>
+      <Source>
+        log.error("ERROR - test");
+      </Source>
+    </Script>
+    <Transition to="plan1"/>
+  </Step>
+  <Step action="rule:TestdRule" condition="false" icon="Default" name="plan1" posX="199" posY="23">
+    <Transition to="plan2"/>
+  </Step>
+  <Step icon="Default" name="plan2" posX="198" posY="123">
+    <Script>
+      <Source>
+        log.error("ERROR 123 PLAN 2");
+      </Source>
+    </Script>
+    <Transition to="Stop"/>
+  </Step>
+  <Step icon="Stop" name="Stop" posX="396"/>
+</Workflow>
