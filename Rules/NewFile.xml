@@ -4,7 +4,7 @@
   <Rule created="1651241695534" id="c0a8010480751c5d818075acb92e0117" language="beanshell" modified="1655896193808" name="No Correlator" type="Correlation"/>
   <Rule created="1651241695679" id="c0a8010480751c5d818075acb9bf0118" language="beanshell" modified="1655896193992" name="Clear CustomGlobal">
     <Source>
-	    //Added by raja
+	    //Added by raja super
       
         import sailpoint.object.CustomGlobal;
 
